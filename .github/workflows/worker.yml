@@ -25,3 +25,9 @@ jobs:
           workingDirectory: worker
       - name: Report public Worker URL
         run: echo "::notice title=Worker URL::${{ steps.deploy.outputs.deployment-url }}"
+      - name: Smoke-test live feeds
+        run: |
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 "${{ steps.deploy.outputs.deployment-url }}/health" | grep '"ok":true'
+          for source in Z V G; do
+            curl --fail --silent --show-error --retry 5 --retry-delay 2 "${{ steps.deploy.outputs.deployment-url }}/feed/$source" | grep -E -m1 '<(rss|feed)([ >])'
+          done
