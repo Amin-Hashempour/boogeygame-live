@@ -1,7 +1,9 @@
 'use strict';
 const STORAGE = 'noqte.news.v1';
 const NEWS_ENDPOINT = ['localhost', '127.0.0.1'].includes(location.hostname) ? '/api/news' : 'news.json';
+const LIVE_API = 'https://boogeygame-news.m-a-hashempour.workers.dev';
 const names = { Z: 'زومجی', V: 'ویجیاتو', G: 'گیمفا' };
+const sourceBases = { Z: 'https://www.zoomg.ir', V: 'https://vigiato.net', G: 'https://gamefa.com' };
 let state = { items: [], sources: {}, lastUpdate: null };
 let storageWarning = false;
 try {
@@ -16,6 +18,54 @@ function httpURL(value) {
 function imageURL(value) {
   if (typeof value === 'string' && /^\/api\/image\/[a-f0-9]{64}$/.test(value)) return value;
   return httpURL(value);
+}
+function feedURL(value, base) {
+  try { const url = new URL(value, base); return ['https:', 'http:'].includes(url.protocol) ? url.href : ''; } catch { return ''; }
+}
+function imageFromHTML(value, base) {
+  if (!value) return '';
+  const document = new DOMParser().parseFromString(value, 'text/html');
+  const image = document.querySelector('img');
+  return feedURL(image?.dataset.src || image?.dataset.lazySrc || image?.dataset.original || image?.getAttribute('src') || '', base);
+}
+function parseFeed(xml, base) {
+  const document = new DOMParser().parseFromString(xml, 'application/xml');
+  if (document.querySelector('parsererror')) throw new Error('invalid feed');
+  const entries = [...document.getElementsByTagName('*')].filter(node => ['item', 'entry'].includes(node.localName));
+  const seen = new Set(); const items = [];
+  for (const entry of entries) {
+    let title = ''; let link = ''; let published = ''; let image = '';
+    for (const node of entry.querySelectorAll('*')) {
+      const tag = node.localName;
+      if (tag === 'title' && !title) title = node.textContent.trim();
+      else if (tag === 'link' && !link && (node.getAttribute('rel') || 'alternate') === 'alternate') link = node.getAttribute('href') || node.textContent;
+      else if (['pubDate', 'published', 'updated'].includes(tag) && !published) published = node.textContent;
+      if (['thumbnail', 'content', 'enclosure'].includes(tag)) {
+        const candidate = node.getAttribute('url') || node.getAttribute('href') || node.getAttribute('src') || node.getAttribute('file') || '';
+        if (candidate && (tag !== 'enclosure' || (node.getAttribute('type') || '').startsWith('image/'))) image ||= feedURL(candidate, base);
+      }
+      if (['description', 'encoded', 'content'].includes(tag) && !image) image = imageFromHTML(node.textContent, base);
+    }
+    link = feedURL(link.trim(), base);
+    if (!title || !link || seen.has(link)) continue;
+    seen.add(link); items.push({ id: link, url: link, title, image, published });
+  }
+  if (!items.length) throw new Error('empty feed');
+  if (items.every(item => !Number.isNaN(Date.parse(item.published)))) items.sort((a, b) => Date.parse(b.published) - Date.parse(a.published));
+  return items;
+}
+async function fetchLiveNews(signal) {
+  const pairs = await Promise.all(Object.keys(names).map(async code => {
+    try {
+      const response = await fetch(`${LIVE_API}/feed/${code}?v=${Date.now()}`, { cache: 'no-store', signal });
+      if (!response.ok) throw new Error('feed');
+      return [code, { items: parseFeed(await response.text(), sourceBases[code]), error: null }];
+    } catch (error) {
+      if (error.name === 'AbortError') throw error;
+      return [code, { items: [], error: `دریافت مطالب ${names[code]} ممکن نشد؛ دوباره تلاش کن.` }];
+    }
+  }));
+  return Object.fromEntries(pairs);
 }
 function message(text, error = false) {
   const node = document.createElement('div'); node.className = 'notice' + (error ? ' error' : ''); node.textContent = text; $('messages').append(node);
@@ -91,10 +141,14 @@ async function refresh({ silent = false } = {}) {
   }
   const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 45000);
   try {
-    const separator = NEWS_ENDPOINT.includes('?') ? '&' : '?';
-    const response = await fetch(`${NEWS_ENDPOINT}${separator}v=${Date.now()}`, { cache: 'no-store', signal: controller.signal });
-    if (!response.ok) throw new Error('server');
-    const result = await response.json(); let added = 0; let success = 0;
+    let result;
+    if (['localhost', '127.0.0.1'].includes(location.hostname)) {
+      const separator = NEWS_ENDPOINT.includes('?') ? '&' : '?';
+      const response = await fetch(`${NEWS_ENDPOINT}${separator}v=${Date.now()}`, { cache: 'no-store', signal: controller.signal });
+      if (!response.ok) throw new Error('server');
+      result = await response.json();
+    } else result = await fetchLiveNews(controller.signal);
+    let added = 0; let success = 0;
     for (const code of Object.keys(names)) {
       const source = result[code];
       if (!source || source.error || !Array.isArray(source.items) || !source.items.length) {
