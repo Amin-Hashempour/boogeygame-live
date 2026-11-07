@@ -84,8 +84,11 @@ function mergeSource(current, code, incoming) {
   return fresh.length;
 }
 async function refresh({ silent = false } = {}) {
-  const button = $('refresh'); button.disabled = true; button.setAttribute('aria-busy', 'true');
-  if (!silent) { $('refresh-label').textContent = 'در حال بررسی…'; $('messages').replaceChildren(); }
+  const button = $('refresh');
+  if (!silent) {
+    button.disabled = true; button.setAttribute('aria-busy', 'true');
+    $('refresh-label').textContent = 'در حال بررسی…'; $('messages').replaceChildren();
+  }
   const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 45000);
   try {
     const separator = NEWS_ENDPOINT.includes('?') ? '&' : '?';
@@ -110,8 +113,11 @@ async function refresh({ silent = false } = {}) {
   } catch (error) {
     if (!silent) message(error.name === 'AbortError' ? 'دریافت بیش از حد طول کشید؛ دوباره امتحان کن.' : 'دریافت خبرها ممکن نشد؛ اتصال اینترنت را بررسی کن و دوباره تلاش کن.', true);
   } finally {
-    clearTimeout(timeout); button.disabled = false; button.removeAttribute('aria-busy');
-    if (!silent) $('refresh-label').textContent = 'تازه‌ها رو بگیر';
+    clearTimeout(timeout);
+    if (!silent) {
+      button.disabled = false; button.removeAttribute('aria-busy');
+      $('refresh-label').textContent = 'تازه‌ها رو بگیر';
+    }
   }
 }
 document.querySelectorAll('.filter').forEach(button => button.addEventListener('click', () => {
