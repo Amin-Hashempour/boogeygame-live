@@ -1,3 +1,4 @@
+// Only these three upstream feeds can be requested through this Worker.
 const SOURCES = {
   Z: ['https://www.zoomg.ir/feed/', 'https://www.zoomg.ir/rss/'],
   V: ['https://vigiato.net/feed/'],
