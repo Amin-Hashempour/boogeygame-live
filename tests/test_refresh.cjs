@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const assert = require('node:assert/strict');
 const script = fs.readFileSync(require('node:path').join(__dirname, '../app.js'), 'utf8');
 const start = script.indexOf('function mergeSource(');
-const end = script.indexOf('async function refresh()', start);
+const end = script.indexOf('async function refresh(', start);
 const merge = new Function(script.slice(start, end) + '; return mergeSource;')();
 const items = (...ids) => ids.map(id => ({ id, title: id, url: `https://example.org/${id}` }));
 let state = { items: [], sources: {} };

@@ -83,35 +83,48 @@ function mergeSource(current, code, incoming) {
   current.sources[code] = { seen: [...new Set([...(previous?.seen || []), ...incoming.map(item => item.id)])] };
   return fresh.length;
 }
-async function refresh() {
-  const button = $('refresh'); button.disabled = true; button.setAttribute('aria-busy', 'true'); $('refresh-label').textContent = 'در حال بررسی…'; $('messages').replaceChildren();
+async function refresh({ silent = false } = {}) {
+  const button = $('refresh'); button.disabled = true; button.setAttribute('aria-busy', 'true');
+  if (!silent) { $('refresh-label').textContent = 'در حال بررسی…'; $('messages').replaceChildren(); }
   const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 45000);
   try {
-    const response = await fetch(NEWS_ENDPOINT, { cache: 'no-store', signal: controller.signal });
+    const separator = NEWS_ENDPOINT.includes('?') ? '&' : '?';
+    const response = await fetch(`${NEWS_ENDPOINT}${separator}v=${Date.now()}`, { cache: 'no-store', signal: controller.signal });
     if (!response.ok) throw new Error('server');
     const result = await response.json(); let added = 0; let success = 0;
     for (const code of Object.keys(names)) {
       const source = result[code];
-      if (!source || source.error || !Array.isArray(source.items) || !source.items.length) { message(source?.error || `پاسخی از ${names[code]} دریافت نشد.`, true); continue; }
+      if (!source || source.error || !Array.isArray(source.items) || !source.items.length) {
+        if (!silent) message(source?.error || `پاسخی از ${names[code]} دریافت نشد.`, true);
+        continue;
+      }
       const items = source.items.filter(item => item && typeof item.id === 'string' && typeof item.title === 'string' && httpURL(item.url));
-      if (!items.length) { message(`فهرست ${names[code]} قابل خواندن نیست.`, true); continue; }
+      if (!items.length) { if (!silent) message(`فهرست ${names[code]} قابل خواندن نیست.`, true); continue; }
       added += mergeSource(state, code, items); success++;
     }
     if (success) {
       state.items.sort((a, b) => (Date.parse(b.published) || 0) - (Date.parse(a.published) || 0));
       state.lastUpdate = new Date().toISOString(); persist(); render();
-      message(added ? `${added.toLocaleString('fa-IR')} مطلب تازه به فهرست اضافه شد.` : 'بررسی شد؛ مطلب تازه‌ای منتشر نشده است.');
+      if (added || !silent) message(added ? `${added.toLocaleString('fa-IR')} مطلب تازه به فهرست اضافه شد.` : 'بررسی شد؛ مطلب تازه‌ای منتشر نشده است.');
     }
   } catch (error) {
-    message(error.name === 'AbortError' ? 'دریافت بیش از حد طول کشید؛ دوباره امتحان کن.' : 'دریافت خبرها ممکن نشد؛ اتصال اینترنت را بررسی کن و دوباره تلاش کن.', true);
-  } finally { clearTimeout(timeout); button.disabled = false; button.removeAttribute('aria-busy'); $('refresh-label').textContent = 'تازه‌ها رو بگیر'; }
+    if (!silent) message(error.name === 'AbortError' ? 'دریافت بیش از حد طول کشید؛ دوباره امتحان کن.' : 'دریافت خبرها ممکن نشد؛ اتصال اینترنت را بررسی کن و دوباره تلاش کن.', true);
+  } finally {
+    clearTimeout(timeout); button.disabled = false; button.removeAttribute('aria-busy');
+    if (!silent) $('refresh-label').textContent = 'تازه‌ها رو بگیر';
+  }
 }
 document.querySelectorAll('.filter').forEach(button => button.addEventListener('click', () => {
   filter = button.dataset.filter;
   document.querySelectorAll('.filter').forEach(item => { const active = item === button; item.classList.toggle('active', active); item.setAttribute('aria-pressed', String(active)); });
   render();
 }));
-$('refresh').addEventListener('click', refresh);
+$('refresh').addEventListener('click', () => refresh());
 render();
 if (storageWarning) message('ذخیرهٔ قبلی خوانده نشد؛ در این صفحه از فهرست تازه استفاده می‌شود.', true);
 if (location.protocol === 'file:') message('برای دریافت خبرها، python3 server.py را اجرا کن و آدرس http://127.0.0.1:8765 را در مرورگر باز کن.', true);
+else {
+  refresh({ silent: true });
+  setInterval(() => { if (!document.hidden) refresh({ silent: true }); }, 60_000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh({ silent: true }); });
+}
