@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'worker/**'
+      - '.github/workflows/worker.yml'
 
 permissions:
   contents: read
@@ -16,8 +17,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Deploy Cloudflare Worker
+        id: deploy
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: worker
+      - name: Report public Worker URL
+        run: echo "::notice title=Worker URL::${{ steps.deploy.outputs.deployment-url }}"
