@@ -29,5 +29,7 @@ jobs:
         run: |
           curl --fail --silent --show-error --retry 5 --retry-delay 2 "${{ steps.deploy.outputs.deployment-url }}/health" | grep '"ok":true'
           for source in Z V G; do
-            curl --fail --silent --show-error --retry 5 --retry-delay 2 "${{ steps.deploy.outputs.deployment-url }}/feed/$source" | grep -E -m1 '<(rss|feed)([ >])'
+            article="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 "${{ steps.deploy.outputs.deployment-url }}/feed/$source" | tee "/tmp/$source.xml" | python3 tests/first_feed_link.py)"
+            grep -E -m1 '<(rss|feed)([ >])' "/tmp/$source.xml"
+            curl --fail --silent --show-error --retry 5 --retry-delay 2 --output /dev/null --get --data-urlencode "url=$article" "${{ steps.deploy.outputs.deployment-url }}/image/$source"
           done

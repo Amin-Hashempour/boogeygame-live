@@ -19,6 +19,12 @@ function imageURL(value) {
   if (typeof value === 'string' && /^\/api\/image\/[a-f0-9]{64}$/.test(value)) return value;
   return httpURL(value);
 }
+function articleImageURL(item) {
+  if (!['localhost', '127.0.0.1'].includes(location.hostname) && names[item.source] && httpURL(item.url)) {
+    return `${LIVE_API}/image/${item.source}?url=${encodeURIComponent(item.url)}`;
+  }
+  return imageURL(item.image);
+}
 function feedURL(value, base) {
   try { const url = new URL(value, base); return ['https:', 'http:'].includes(url.protocol) ? url.href : ''; } catch { return ''; }
 }
@@ -84,8 +90,8 @@ function render() {
     const link = document.createElement('a'); link.className = 'story-link'; link.href = httpURL(item.url); link.target = '_blank'; link.rel = 'noopener noreferrer';
     const imageWrap = document.createElement('div'); imageWrap.className = 'image-wrap';
     const fallback = () => { imageWrap.replaceChildren(); const mark = document.createElement('span'); mark.textContent = item.source; imageWrap.append(mark); };
-    if (imageURL(item.image)) {
-      const image = document.createElement('img'); image.src = imageURL(item.image); image.alt = item.title; image.loading = 'lazy'; image.addEventListener('error', fallback, { once: true }); imageWrap.append(image);
+    if (articleImageURL(item)) {
+      const image = document.createElement('img'); image.src = articleImageURL(item); image.alt = item.title; image.loading = 'lazy'; image.addEventListener('error', fallback, { once: true }); imageWrap.append(image);
     } else fallback();
     const title = document.createElement('h2'); title.textContent = item.title;
     const meta = document.createElement('div'); meta.className = 'card-meta';

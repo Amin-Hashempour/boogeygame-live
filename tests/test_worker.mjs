@@ -19,7 +19,21 @@ try {
 
   const health = await worker.fetch(new Request('https://worker.example/health'));
   assert.deepEqual(await health.json(), { ok: true });
-  console.log('PASS: Worker source allowlist, RSS response, CORS, health and unknown route');
+
+  globalThis.fetch = async (url, options) => {
+    if (String(url) === 'https://www.zoomg.ir/article') {
+      return new Response('<meta property="og:image" content="https://cdn.example/cover.jpg">', { headers: { 'Content-Type': 'text/html' } });
+    }
+    assert.equal(String(url), 'https://cdn.example/cover.jpg');
+    assert.equal(options.headers.Referer, 'https://www.zoomg.ir/article');
+    return new Response('image bytes', { headers: { 'Content-Type': 'image/jpeg' } });
+  };
+  const image = await worker.fetch(new Request('https://worker.example/image/Z?url=https%3A%2F%2Fwww.zoomg.ir%2Farticle'));
+  assert.equal(image.status, 200);
+  assert.equal(image.headers.get('Content-Type'), 'image/jpeg');
+  const blocked = await worker.fetch(new Request('https://worker.example/image/Z?url=https%3A%2F%2Fevil.example%2Farticle'));
+  assert.equal(blocked.status, 404);
+  console.log('PASS: Worker RSS, CORS, health, article allowlist and image proxy');
 } finally {
   globalThis.fetch = originalFetch;
 }
